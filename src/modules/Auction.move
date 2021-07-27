@@ -3,7 +3,6 @@
 /// Date: 2021-07-26
 
 address 0xbd7e8be8fae9f60f2f5136433e36a091 {
-
 /// The <Auction> module defined some struct of auction
 module Auction {
     use 0x1::Signer;
@@ -16,12 +15,12 @@ module Auction {
     ///
     /// Auction state
     ///
-    const INIT: u8 = 0; // 初始化
-    const PENDING: u8 = 1; // 待拍卖
-    const BIDDING: u8 = 2; // 竞拍中
-    const UNDER_BASIC: u8 = 4; // 未达到起拍价
-    const NO_BID: u8 = 5; // 无人竞价
-    const CONFIRM: u8 = 6; // 成交
+    const INIT: u8 = 0;
+    const PENDING: u8 = 1;
+    const BIDDING: u8 = 2;
+    const UNDER_REVERSE: u8 = 4;
+    const NO_BID: u8 = 5;
+    const CONFIRM: u8 = 6;
 
     ///
     /// Auction error code
@@ -29,31 +28,39 @@ module Auction {
     const ERR_AUCTION_ID_MISMATCH: u8 = 10001;
     const ERR_AUCTION_EXISTS_ALREADY: u8 = 10002;
     const ERR_AUCTION_INVALID_STATE: u8 = 10003;
+    const ERR_AUCTION_INVALID_SELLER: u8 = 10004;
+    const ERR_AUCTION_BID_REPEATE: u8 = 10005;
+
 
     ///
-    /// 拍卖信息
-    ///
+    /// Auction data struct.
     struct Auction<TokenT> has copy, drop, key {
-    start_time: u64, // 起拍时间
-        end_time: u64, // 结束时间
+        /// Start auction time
+        start_time: u64,
+        /// End auction time
+        end_time: u64,
+        /// Reverse price
+        reserve_price: u128,
+        /// Increase price, each bid price number must several time of this number
+        increments_price: u128,
+        /// Hammer price, user can buy objective at this price
+        hammer_price: u128,
+        /// After user called hammer_price, this value is true
+        hammer_locked: bool,
 
-        reserve_price: u128, // 保留价
-        increments_price: u128, // 加价阶梯
-        hammer_price: u128, // 一口价
-        hammer_locked: bool, // 一口价锁定
+        /// seller informations
+        seller: address,
+        seller_deposit: Token::Token<Auc::Auc>,
+        seller_objective: Token::Token<TokenT>,
 
-        seller: address, // 拍卖方
-        seller_deposit: Token::Token<Auc::Auc>, // 拍卖保证金
-        seller_objective: Token::Token<TokenT>, // 拍卖标的物
-
-        buyer: address, // 当前买受人
-        buyer_bid_amount: Token<Auc::Auc>, // 当前买受人出价
+        /// buyer informations
+        buyer: address,
+        buyer_bid_reserve: Token<Auc::Auc>,
     }
 
 
     //////////////////////////////////////////////////////////////////////////////
     // Internal fucntions
-
 
     fun do_auction_state<TokenT>(
         auction: &Auction<TokenT>,
@@ -76,13 +83,13 @@ module Auction {
             BIDDING
         };
 
-        if (Option::is_none(auction.buyer_bid_amount)) {
+        if (Option::is_none(auction.buyer_bid_reserve)) {
             NO_BID
         };
 
-        let bid_amount = Token::value<Auc::Auc>(auction.buyer_bid_amount);
+        let bid_amount = Token::value<Auc::Auc>(auction.buyer_bid_reserve);
         if (bid_amount < auction.reserve_price) {
-            UNDER_BASIC
+            UNDER_REVERSE
         };
 
         CONFIRM
@@ -99,7 +106,7 @@ module Auction {
     /// public functions
 
     ///
-    /// 创建拍卖
+    /// Create auction for current signer
     ///
     public fun create<TokenT: store>(account: &signer,
                                      start_time: u64,
@@ -116,6 +123,9 @@ module Auction {
             reserve_price,
             increments_price,
             hammer_price,
+            seller_objective: Token::zero<TokenT>(),
+            seller_deposit: Token::zero<TokenT>(),
+            buyer_bid_reserve: Token::zero<Auc::Auc>()
         };
         move_to(account, auction);
 
@@ -124,7 +134,7 @@ module Auction {
     }
 
     ///
-    /// 拍卖抵押（拍卖方调用）
+    /// Auction mortgage (call by auctioneer)
     ///
     public fun deposit<TokenT: store>(
         account: &signer,
@@ -136,48 +146,84 @@ module Auction {
         assert(state == INIT,
             Errors::invalid_argument(ERR_AUCTION_INVALID_STATE));
 
-        auction.objective = objective;
+        Token::deposit(&mut auction.seller_objective, objective);
         auction.seller_deposit = seller_deposit;
     }
 
-    ///
-    /// 查询状态
-    ///
-    public fun auction_state<TokenT: store>(auctioner: address) acquires Auction {
+    public fun auction_state<TokenT: store>(auctioner: address)  acquires Auction {
         let auction = borrow_global<Auction<TokenT>>(auctioner);
         let current_time = Timestamp::now_milliseconds();
         do_auction_state<TokenT>(auction, current_time)
     }
 
-    ///
-    /// 参与竞价
-    ///
-    public fun bid<TokenT: store>(
-        account: &signer, auctioner: address, bid_price: u128) {
-        let auction = borrow_global<Auction<TokenT>>(auctioner);
+    public fun bid<TokenT: store>(account: &signer,
+                                  auctioneer: address,
+                                  bid_price: u128)  acquires Auction {
+        let auction = borrow_global<Auction<TokenT>>(auctioneer);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state<TokenT>(auction, current_time);
         assert(state == BIDDING, Errors::invalid_state(ERR_AUCTION_INVALID_STATE));
+        assert(auction.seller == auctioneer, Errors::invalid_argument(ERR_AUCTION_INVALID_SELLER));
+        assert(auction.buyer != Signer::address_of(account), Errors::invalid_argument(ERR_AUCTION_BID_REPEATE));
 
-        // Get user token AUC token
-        let token = Token::withdraw<Auc::Auc>(account, bid_price);
-        token
+        // Retreat bid deposit token to latest buyer who has bidden.
+        if (!Option::is_none(auction.buyer) && !Option::is_none(auction.buyer_bid_reserve)) {
+            let bid_reverse = Token::withdraw<Auc::Auc>(
+                auction.buyer_bid_reserve, Token::value(auction.buyer_bid_reserve));
+            Account::deposit(Signer::address_of(auction.buyer), bid_reverse);
+        };
+
+        // Put bid user to current buyer, Get AUC token from user and deposit it to auction.
+        let token = Account::withdraw<Auc::Auc>(account, bid_price);
+        Token::deposit<Auc::Auc>(&mut auction.buyer_bid_reserve, token);
+        auction.buyer = Signer::address_of(account);
     }
 
-
     ///
-    /// 完成拍卖，清理资源
-    /// 拍卖方：若成功，取回拍卖金和保证金，若失败，取拍得回标的物
-    /// 买受方：若成功，取回标的物，若失败（参与方），取回拍卖保证金
+    /// Complete the auction and clean up resources
+    /// Seller:
+    /// If successful, get back the auction money and deposit;
+    /// if it fails, get back the objective
+    ///
+    /// Buyer:
+    /// If successful, get back the subject matter.
+    /// If it fails, get back the objective
     ///
     public fun completed<TokenT: store>(account: &signer, auctioner: address) {
         let auction = borrow_global_mut<Auction<TokenT>>(auctioner);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state<TokenT>(auction, current_time);
-        assert(state == NO_BID || state == CONFIRM || state == UNDER_BASIC,
+        assert(state == NO_BID || state == CONFIRM || state == UNDER_REVERSE,
             Errors::invalid_argument(ERR_AUCTION_INVALID_STATE));
 
-        if (state == NO_BID || state == UNDER_BASIC) {} else if (state == CONFIRM) {};
+        // Bid succeed.
+        if (state == CONFIRM) {
+            /// Put bid amount to seller
+            let bid_reserve = Token::withdraw(&mut auction.buyer_bid_reserve,
+                Token::value<Auc::Auc>(auction.buyer_bid_reserve));
+            Account::deposit<Auc::Auc>(auction.seller, bid_reserve);
+
+            /// Put sell objective to buyer
+            let sell_objective = Token::withdraw(&mut auction.seller_objective,
+                Token::value<TokenT>(auction.seller_objective));
+            Account::deposit<TokenT>(auction.buyer, sell_objective);
+        } else if (state == NO_BID || state == UNDER_REVERSE) {
+            // Retreat last buyer bid deposit token if there has bid
+            if (!Option::is_none(auction.buyer) && !Option::is_none(auction.buyer_bid_reserve)) {
+                let buyer_bid_reverse = Token::withdraw(&mut auction.buyer_bid_reserve,
+                    Token::value<Auc::Auc>(auction.buyer_bid_reserve));
+                Account::deposit(Signer::address_of(auction.buyer), buyer_bid_reverse);
+            };
+
+            // Retreat seller's assets
+            let sell_objective = Token::withdraw(&mut auction.seller_objective,
+                Token::value<TokenT>(auction.seller_objective));
+            Account::deposit<TokenT>(auction.seller, sell_objective);
+
+            let seller_deposit = Token::withdraw(&mut auction.seller_deposit,
+                Token::value<TokenT>(auction.seller_deposit));
+            Account::deposit<TokenT>(auction.seller, seller_deposit);
+        };
 
         // TODO: publish AuctionCompleted event
 
