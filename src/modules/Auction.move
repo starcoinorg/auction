@@ -26,10 +26,20 @@ module Auction {
     ///
     const ERR_AUCTION_ID_MISMATCH: u64 = 10001;
     const ERR_AUCTION_EXISTS_ALREADY: u64 = 10002;
-    const ERR_AUCTION_INVALID_STATE: u64 = 10003;
-    const ERR_AUCTION_INVALID_SELLER: u64 = 10004;
-    const ERR_AUCTION_BID_REPEATE: u64 = 10005;
+    const ERR_AUCTION_NOT_EXISTS: u64 = 10003;
+    const ERR_AUCTION_INVALID_STATE: u64 = 10004;
+    const ERR_AUCTION_INVALID_SELLER: u64 = 10005;
+    const ERR_AUCTION_BID_REPEATE: u64 = 10006;
 
+    struct AuctionCreated has drop, store {
+
+    }
+
+    struct AuctionCompleted has drop, store {}
+
+    struct AuctionAbort has drop, store {}
+
+    struct AuctionBided has drop, store {}
 
     ///
     /// Auction data struct.
@@ -46,15 +56,15 @@ module Auction {
         hammer_price: u128,
         /// After user called hammer_price, this value is true
         hammer_locked: bool,
+
         /// seller informations
         seller: Option::Option<address>,
-
         seller_deposit: Token::Token<Auc::Auc>,
         seller_objective: Token::Token<ObjectiveTokenT>,
 
         /// buyer informations
         buyer: Option::Option<address>,
-        buyer_bid_reserve: Token::Token<Auc::Auc>,
+    buyer_bid_reserve: Token::Token<Auc::Auc>,
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -97,7 +107,7 @@ module Auction {
                                                             reserve_price: u128,
                                                             increments_price: u128,
                                                             hammer_price: u128) {
-        assert(auction_exists<ObjectiveTokenT>(Signer::address_of(account)),
+        assert(!auction_exists<ObjectiveTokenT>(Signer::address_of(account)),
             Errors::invalid_argument(ERR_AUCTION_EXISTS_ALREADY));
 
         let auction = Auction<ObjectiveTokenT> {
@@ -118,6 +128,14 @@ module Auction {
         // TODO: Publish AuctionCreated event
 
     }
+
+    /// Drop auction if caller is owner
+    public fun destruct<ObjectiveTokenT: copy + drop + store>(account : &signer) {
+        assert(auction_exists<ObjectiveTokenT>(Signer::address_of(account)),
+            Errors::invalid_argument(ERR_AUCTION_NOT_EXISTS));
+        // TODO:
+    }
+
 
     ///
     /// Auction mortgage (call by auctioneer)
@@ -140,7 +158,7 @@ module Auction {
 
 
     public fun auction_state<ObjectiveTokenT: copy + drop + store>(
-        auctioner: address) : u8 acquires Auction {
+        auctioner: address): u8 acquires Auction {
         let auction = borrow_global<Auction<ObjectiveTokenT>>(auctioner);
         let current_time = Timestamp::now_milliseconds();
         do_auction_state<ObjectiveTokenT>(auction, current_time)
@@ -180,7 +198,7 @@ module Auction {
     /// If it fails, get back the objective
     ///
     public fun completed<ObjectiveTokenT: copy + drop + store>(
-        _account: &signer,
+        account: &signer,
         auctioneer: address) acquires Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT>>(auctioneer);
         let current_time = Timestamp::now_milliseconds();
@@ -199,11 +217,10 @@ module Auction {
                 Option::extract(&mut auction.seller),
                 &mut auction.seller_deposit);
 
-             // Put sell objective to buyer
+            // Put sell objective to buyer
             AucTokenUtil::extract_from_reverse(
                 Option::extract(&mut auction.buyer),
                 &mut auction.seller_objective);
-
         } else if (state == NO_BID || state == UNDER_REVERSE) {
             // Retreat last buyer bid deposit token if there has bid
             if (!Option::is_none(&auction.buyer) &&
@@ -222,11 +239,33 @@ module Auction {
                 Option::extract(&mut auction.seller),
                 &mut auction.seller_objective);
         };
+
+
         // TODO: publish AuctionCompleted event
 
     }
 
-    fun platform_addr() : address {
+    public fun auction_info<ObjectiveTokenT: copy + drop + store>(auctioneer: address): (u64, u64, u128, u128, u128, u8) acquires Auction {
+        let auction = borrow_global_mut<Auction<ObjectiveTokenT>>(auctioneer);
+        let current_time = Timestamp::now_milliseconds();
+        let state = do_auction_state<ObjectiveTokenT>(auction, current_time);
+
+        (
+            auction.start_time,
+            auction.end_time,
+            auction.reserve_price,
+            auction.increments_price,
+            auction.hammer_price,
+            state
+        )
+    }
+
+    /// Buy objective with one price
+    public fun hammer_buy(_account: &signer) {
+        // TODO
+    }
+
+    fun platform_addr(): address {
         @0xbd7e8be8fae9f60f2f5136433e36a091
     }
 }
