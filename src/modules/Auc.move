@@ -24,9 +24,9 @@ module Auc {
 //    use 0x1::Option;
 //    use 0x1::Config;
 //    use 0x1::Version;
-    use 0x1::Signer;
+//    use 0x1::Signer;
 
-    /// Bdt token marker.
+    /// Auc token marker.
     struct Auc has copy, drop, store {}
 
     /// precision of USDx token.
