@@ -7,6 +7,7 @@ module Auction {
     use 0x1::Token;
     use 0x1::Option;
     use 0x1::Timestamp;
+    use 0x1::Event;
 
     use 0xbd7e8be8fae9f60f2f5136433e36a091::Auc;
     use 0xbd7e8be8fae9f60f2f5136433e36a091::AucTokenUtil;
@@ -31,15 +32,11 @@ module Auction {
     const ERR_AUCTION_INVALID_SELLER: u64 = 10005;
     const ERR_AUCTION_BID_REPEATE: u64 = 10006;
 
-    struct AuctionCreated has drop, store {
+    struct AuctionCreatedEvent has drop, store {}
 
-    }
+    struct AuctionCompletedEvent has drop, store {}
 
-    struct AuctionCompleted has drop, store {}
-
-    struct AuctionAbort has drop, store {}
-
-    struct AuctionBided has drop, store {}
+    struct AuctionBidedEvent has drop, store {}
 
     ///
     /// Auction data struct.
@@ -64,7 +61,14 @@ module Auction {
 
         /// buyer informations
         buyer: Option::Option<address>,
-    buyer_bid_reserve: Token::Token<Auc::Auc>,
+        buyer_bid_reserve: Token::Token<Auc::Auc>,
+
+        /// event stream for create
+        auction_created_events: Event::EventHandle<AuctionCreatedEvent>,
+        /// event stream for bid
+        auction_bid_events: Event::EventHandle<AuctionBidedEvent>,
+        /// event stream for auction completed
+        auction_completed_events: Event::EventHandle<AuctionCompletedEvent>,
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -122,6 +126,9 @@ module Auction {
             seller_deposit: Token::zero<Auc::Auc>(),
             buyer: Option::none<address>(),
             buyer_bid_reserve: Token::zero<Auc::Auc>(),
+            auction_created_events: Event::new_event_handle<AuctionCreatedEvent>(account),
+            auction_bid_events: Event::new_event_handle<AuctionBidedEvent>(account),
+            auction_completed_events: Event::new_event_handle<AuctionCompletedEvent>(account),
         };
         move_to(account, auction);
 
@@ -198,7 +205,7 @@ module Auction {
     /// If it fails, get back the objective
     ///
     public fun completed<ObjectiveTokenT: copy + drop + store>(
-        account: &signer,
+        _account: &signer,
         auctioneer: address) acquires Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT>>(auctioneer);
         let current_time = Timestamp::now_milliseconds();
