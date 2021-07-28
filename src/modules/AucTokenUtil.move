@@ -20,8 +20,13 @@ module AucTokenUtil {
     }
 
     /// Check token is none zero
-    public fun none_zero<TokenType: copy + drop + store>(token : &Token::Token<TokenType>) : bool {
+    public fun non_zero<TokenType: copy + drop + store>(token : &Token::Token<TokenType>) : bool {
         Token::value(token) > 0
+    }
+
+    /// Check token is zero
+    public fun zero<TokenType: copy + drop + store>(token : &Token::Token<TokenType>) : bool {
+        Token::value(token) <= 0
     }
 }
 }

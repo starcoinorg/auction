@@ -8,6 +8,7 @@ module Auction {
     use 0x1::Option;
     use 0x1::Timestamp;
     use 0x1::Event;
+    use 0x1::Debug;
 
     use 0xbd7e8be8fae9f60f2f5136433e36a091::AucTokenUtil;
 
@@ -32,6 +33,8 @@ module Auction {
     const ERR_AUCTION_BID_REPEATE: u64 = 10006;
     const ERR_AUCTION_INSUFFICIENT_DEPOSIT : u64 = 1007;
     const ERR_AUCTION_BLOW_START_PRICE : u64 = 1008;
+    const ERR_AUCTION_BID_RESERVE_NOT_CLEAN : u64 = 1009;
+    const ERR_AUCTION_BID_CANNOT_BE_SELLER : u64 = 1010;
 
     struct AuctionCreatedEvent has drop, store {
         creator: address,
@@ -188,7 +191,8 @@ module Auction {
         let depsit_token = Account::withdraw<BidTokenType>(account, deposit_price);
         Token::deposit(&mut auction.seller_deposit, depsit_token);
 
-        auction.seller = Option::some<address>(Signer::address_of(account));
+        // Assign current user to seller
+        Option::fill(&mut auction.seller, Signer::address_of(account));
     }
 
 
@@ -204,27 +208,43 @@ module Auction {
                    BidTokenType: copy + drop + store>(account: &signer,
                                                       creator: address,
                                                       bid_price: u128) acquires Auction {
+
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
         assert(state == BIDDING, Errors::invalid_state(ERR_AUCTION_INVALID_STATE));
-        assert(Option::extract(&mut auction.buyer) != Signer::address_of(account),
-            Errors::invalid_argument(ERR_AUCTION_BID_REPEATE));
+
+        let account_address = Signer::address_of(account);
+        let last_buyer = Option::get_with_default(&auction.buyer, default_addr());
+        let seller = Option::get_with_default(&auction.seller, default_addr());
+        assert(bid_price >= auction.start_price, Errors::invalid_state(ERR_AUCTION_BLOW_START_PRICE));
+        assert(account_address != seller, Errors::invalid_state(ERR_AUCTION_BID_CANNOT_BE_SELLER));
+
+        // The same user cannot bid twice in a row
+        assert(account_address != last_buyer, Errors::invalid_argument(ERR_AUCTION_BID_REPEATE));
 
         // Retreat bid deposit token to latest buyer who has bidden.
         let bid_reverse_amount = Token::value<BidTokenType>(&auction.buyer_bid_reserve);
-        assert(bid_price >= auction.start_price, ERR_AUCTION_BLOW_START_PRICE);
-
-        if (!Option::is_none(&auction.buyer) && bid_reverse_amount > 0) {
-            let bid_reverse = Token::withdraw<BidTokenType>(&mut auction.buyer_bid_reserve, bid_reverse_amount);
-            Account::deposit(Option::extract(&mut auction.buyer), bid_reverse);
+        if (last_buyer != default_addr() && bid_reverse_amount > 0) {
+            AucTokenUtil::extract_from_reverse(last_buyer, &mut auction.buyer_bid_reserve);
         };
+
+        Debug::print(&bid_reverse_amount);
+
+        // Assert bid reverse is clean
+        assert(AucTokenUtil::zero(&auction.buyer_bid_reserve), ERR_AUCTION_BID_RESERVE_NOT_CLEAN);
 
         // Put bid user to current buyer, Get AUC token from user and deposit it to auction.
         let token = Account::withdraw<BidTokenType>(account, bid_price);
         Token::deposit<BidTokenType>(&mut auction.buyer_bid_reserve, token);
-        auction.buyer = Option::some(Signer::address_of(account));
 
+        // Replace old buyer to new buyer
+        let new_buyer = Signer::address_of(account);
+        if (Option::is_some(&mut auction.buyer)) {
+            let _ = Option::swap(&mut auction.buyer, new_buyer);
+        } else {
+            Option::fill(&mut auction.buyer, new_buyer);
+        };
 
         // Publish AuctionBid event
         Event::emit_event(
@@ -256,51 +276,42 @@ module Auction {
         assert(state == NO_BID || state == CONFIRM || state == UNDER_REVERSE,
             Errors::invalid_argument(ERR_AUCTION_INVALID_STATE));
 
+        let seller = Option::get_with_default(&auction.seller, default_addr());
+        let buyer = Option::get_with_default(&auction.buyer, default_addr());
+
         // Bid succeed.
         if (state == CONFIRM) {
             // Put bid amount to seller
-            AucTokenUtil::extract_from_reverse(
-                Option::extract(&mut auction.seller),
-                &mut auction.buyer_bid_reserve);
 
-            AucTokenUtil::extract_from_reverse(
-                Option::extract(&mut auction.seller),
-                &mut auction.seller_deposit);
+            AucTokenUtil::extract_from_reverse(seller, &mut auction.buyer_bid_reserve);
+            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
 
             // Put sell objective to buyer
-            AucTokenUtil::extract_from_reverse(
-                Option::extract(&mut auction.buyer),
-                &mut auction.seller_objective);
+            AucTokenUtil::extract_from_reverse(buyer, &mut auction.seller_objective);
+
         } else if (state == NO_BID || state == UNDER_REVERSE) {
             // Retreat last buyer bid deposit token if there has bid
-            if (!Option::is_none(&auction.buyer) &&
-                    !AucTokenUtil::none_zero(&auction.buyer_bid_reserve)) {
-                AucTokenUtil::extract_from_reverse(
-                    Option::extract(&mut auction.buyer),
-                    &mut auction.buyer_bid_reserve);
+            if (buyer != default_addr() && AucTokenUtil::non_zero(&auction.buyer_bid_reserve)) {
+                AucTokenUtil::extract_from_reverse(buyer, &mut auction.buyer_bid_reserve);
             };
 
             // Retreat seller's assets
-            AucTokenUtil::extract_from_reverse(
-                Option::extract(&mut auction.seller),
-                &mut auction.seller_deposit);
+            let seller = Option::get_with_default(&auction.seller, default_addr());
+            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
+            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_objective);
 
-            AucTokenUtil::extract_from_reverse(
-                Option::extract(&mut auction.seller),
-                &mut auction.seller_objective);
+            // Publish AuctionCompleted event
+            Event::emit_event(
+                &mut auction.auction_completed_events,
+                AuctionCompletedEvent {
+                    creator,
+                },
+            );
         };
-
-        // Publish AuctionCompleted event
-        Event::emit_event(
-            &mut auction.auction_completed_events,
-            AuctionCompletedEvent {
-                creator,
-            },
-        );
     }
 
     public fun auction_info<ObjectiveTokenT: copy + drop + store,
-                            BidTokenType: copy + drop + store>(creator: address): (u64, u64, u128, u128, u128, u8) acquires Auction {
+                            BidTokenType: copy + drop + store>(creator: address): (u64, u64, u128, u128, u128, u8, address, u128) acquires Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
@@ -310,7 +321,9 @@ module Auction {
             auction.reserve_price,
             auction.increments_price,
             auction.hammer_price,
-            state
+            state,
+            Option::get_with_default(&auction.buyer, default_addr()),
+            Token::value(&auction.buyer_bid_reserve),
         )
     }
 
@@ -321,6 +334,10 @@ module Auction {
 
     fun platform_addr(): address {
         @0xbd7e8be8fae9f60f2f5136433e36a091
+    }
+
+    fun default_addr(): address {
+        platform_addr()
     }
 }
 }
