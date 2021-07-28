@@ -44,6 +44,10 @@ module Auction {
         creator: address,
     }
 
+    struct AuctionPassedEvent has drop, store {
+        creator: address,
+    }
+
     struct AuctionBidedEvent has drop, store {
         creator: address,
         bidder: address,
@@ -83,6 +87,8 @@ module Auction {
         auction_bid_events: Event::EventHandle<AuctionBidedEvent>,
         /// event stream for auction completed
         auction_completed_events: Event::EventHandle<AuctionCompletedEvent>,
+        /// event stream for auction completed
+        auction_passed_events: Event::EventHandle<AuctionPassedEvent>,
     }
 
     //////////////////////////////////////////////////////////////////////////////
@@ -148,6 +154,7 @@ module Auction {
             auction_created_events: Event::new_event_handle<AuctionCreatedEvent>(account),
             auction_bid_events: Event::new_event_handle<AuctionBidedEvent>(account),
             auction_completed_events: Event::new_event_handle<AuctionCompletedEvent>(account),
+            auction_passed_events: Event::new_event_handle<AuctionPassedEvent>(account),
         };
 
         // Publish AuctionCreated event
@@ -282,12 +289,19 @@ module Auction {
         // Bid succeed.
         if (state == CONFIRM) {
             // Put bid amount to seller
-
             AucTokenUtil::extract_from_reverse(seller, &mut auction.buyer_bid_reserve);
             AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
 
             // Put sell objective to buyer
             AucTokenUtil::extract_from_reverse(buyer, &mut auction.seller_objective);
+
+            // Publish AuctionCompleted event
+            Event::emit_event(
+                &mut auction.auction_completed_events,
+                AuctionCompletedEvent {
+                    creator,
+                },
+            );
 
         } else if (state == NO_BID || state == UNDER_REVERSE) {
             // Retreat last buyer bid deposit token if there has bid
@@ -300,10 +314,10 @@ module Auction {
             AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
             AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_objective);
 
-            // Publish AuctionCompleted event
+            // Publish AuctionPassed event
             Event::emit_event(
                 &mut auction.auction_completed_events,
-                AuctionCompletedEvent {
+                AuctionPassedEvent {
                     creator,
                 },
             );
