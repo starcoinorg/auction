@@ -316,7 +316,7 @@ module Auction {
 
             // Publish AuctionPassed event
             Event::emit_event(
-                &mut auction.auction_completed_events,
+                &mut auction.auction_passed_events,
                 AuctionPassedEvent {
                     creator,
                 },
