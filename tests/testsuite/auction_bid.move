@@ -179,6 +179,6 @@ script {
 //    use 0xbd7e8be8fae9f60f2f5136433e36a091::Auction;
 //
 //    fun init(_account: signer) {
-//        Auction::destroy<AUC, STC>(Signer::address_of(_account));
+//        Auction::<AUC, STC>(Signer::address_of(_account));
 //    }
 //}
