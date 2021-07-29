@@ -18,9 +18,9 @@ module Auction {
     const INIT: u8 = 0;
     const PENDING: u8 = 1;
     const BIDDING: u8 = 2;
-    const UNDER_REVERSE: u8 = 4;
-    const NO_BID: u8 = 5;
-    const CONFIRM: u8 = 6;
+    const UNDER_REVERSE: u8 = 3;
+    const NO_BID: u8 = 4;
+    const CONFIRM: u8 = 5;
 
     ///
     /// Auction error code
@@ -167,14 +167,66 @@ module Auction {
         move_to(account, auction);
     }
 
+    ///
     /// Drop auction if caller is owner
-    public fun destruct<ObjectiveTokenT: copy + drop + store,
-                        BidTokenType: copy + drop + store>(account : &signer) {
-        assert(auction_exists<ObjectiveTokenT, BidTokenType>(Signer::address_of(account)),
-            Errors::invalid_argument(ERR_AUCTION_NOT_EXISTS));
-        // TODO:
-    }
+    ///
+    public fun destroy<ObjectiveTokenT: copy + drop + store,
+                       BidTokenType: copy + drop + store>(
+        creator: address) acquires Auction {
 
+        assert(auction_exists<ObjectiveTokenT, BidTokenType>(creator),
+            Errors::invalid_argument(ERR_AUCTION_NOT_EXISTS));
+
+        let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
+        let current_time = Timestamp::now_milliseconds();
+        let _state = do_auction_state(auction, current_time);
+
+        // Debug::print(&22222222);
+
+//        assert(_state == UNDER_REVERSE ||
+//                _state == NO_BID ||
+//                _state == CONFIRM, Errors::invalid_state(ERR_AUCTION_INVALID_STATE));
+
+        let Auction {
+            start_time: _,
+            end_time: _,
+            start_price: _,
+            reserve_price: _,
+            increments_price: _,
+            hammer_price: _,
+            hammer_locked: _,
+            seller,
+            seller_deposit,
+            seller_objective,
+            buyer,
+            buyer_bid_reserve,
+            auction_created_events,
+            auction_bid_events,
+            auction_completed_events,
+            auction_passed_events,
+        } = move_from<Auction<ObjectiveTokenT, BidTokenType>>(creator);
+
+        //Debug::print(&33333333);
+
+        let _ = Option::extract(&mut seller);
+        Option::destroy_none(seller);
+
+        let _ = Option::extract(&mut buyer);
+        Option::destroy_none(buyer);
+
+        //Debug::print(&44444444);
+
+        Token::destroy_zero(seller_deposit);
+        Token::destroy_zero(seller_objective);
+        Token::destroy_zero(buyer_bid_reserve);
+
+        Event::destroy_handle(auction_created_events);
+        Event::destroy_handle(auction_bid_events);
+        Event::destroy_handle(auction_completed_events);
+        Event::destroy_handle(auction_passed_events);
+
+        //Debug::print(&55555555);
+    }
 
     ///
     /// Auction `mortgage` (call by creator)
@@ -244,6 +296,9 @@ module Auction {
         // Put bid user to current buyer, Get AUC token from user and deposit it to auction.
         let token = Account::withdraw<BidTokenType>(account, bid_price);
         Token::deposit<BidTokenType>(&mut auction.buyer_bid_reserve, token);
+
+        // Auto accept ObjectTokenType
+        AucTokenUtil::maybe_accept_token<ObjectiveTokenT>(account);
 
         // Replace old buyer to new buyer
         let new_buyer = Signer::address_of(account);
@@ -325,7 +380,8 @@ module Auction {
     }
 
     public fun auction_info<ObjectiveTokenT: copy + drop + store,
-                            BidTokenType: copy + drop + store>(creator: address): (u64, u64, u128, u128, u128, u8, address, u128) acquires Auction {
+                            BidTokenType: copy + drop + store>(
+        creator: address) : (u64, u64, u128, u128, u128, u8, address, address, u128) acquires Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
@@ -336,14 +392,15 @@ module Auction {
             auction.increments_price,
             auction.hammer_price,
             state,
+            Option::get_with_default(&auction.seller, default_addr()),
             Option::get_with_default(&auction.buyer, default_addr()),
             Token::value(&auction.buyer_bid_reserve),
         )
     }
 
     /// Buy objective with one price
-    public fun hammer_buy(_account  : &signer) {
-        // TODO
+    public fun hammer_buy(_account : &signer) {
+
     }
 
     fun platform_addr(): address {
