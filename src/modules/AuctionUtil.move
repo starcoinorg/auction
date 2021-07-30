@@ -1,5 +1,5 @@
 address 0xbd7e8be8fae9f60f2f5136433e36a091 {
-module AucTokenUtil {
+module AuctionUtil {
     use 0x1::Token;
     use 0x1::Account;
     use 0x1::Errors;

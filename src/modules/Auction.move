@@ -3,14 +3,13 @@ address 0xbd7e8be8fae9f60f2f5136433e36a091 {
 module Auction {
     use 0x1::Signer;
     use 0x1::Account;
-    use 0x1::Errors;
     use 0x1::Token;
     use 0x1::Option;
     use 0x1::Timestamp;
     use 0x1::Event;
-    use 0x1::Debug;
+    //use 0x1::Debug;
 
-    use 0xbd7e8be8fae9f60f2f5136433e36a091::AucTokenUtil;
+    use 0xbd7e8be8fae9f60f2f5136433e36a091::AuctionUtil;
 
     ///
     /// Auction state
@@ -134,7 +133,7 @@ module Auction {
                                                          increments_price: u128,
                                                          hammer_price: u128) {
         assert(!auction_exists<ObjectiveTokenT, BidTokenType>(Signer::address_of(account)),
-            Errors::invalid_argument(ERR_AUCTION_EXISTS_ALREADY));
+            ERR_AUCTION_EXISTS_ALREADY);
 
         let auction = Auction<ObjectiveTokenT, BidTokenType> {
             start_time,
@@ -168,14 +167,13 @@ module Auction {
     public fun destroy<ObjectiveTokenT: copy + drop + store,
                 BidTokenType: copy + drop + store>(creator: address) acquires Auction {
 
-        assert(auction_exists<ObjectiveTokenT, BidTokenType>(creator),
-            Errors::invalid_argument(ERR_AUCTION_NOT_EXISTS));
+        assert(auction_exists<ObjectiveTokenT, BidTokenType>(creator), ERR_AUCTION_NOT_EXISTS);
 
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let _state = do_auction_state(auction, current_time);
 
-        Debug::print(&22222222);
+        //Debug::print(&22222222);
 
 //        assert(_state == UNDER_REVERSE ||
 //                _state == NO_BID ||
@@ -232,8 +230,8 @@ module Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
-        assert(state == INIT, Errors::invalid_argument(ERR_AUCTION_INVALID_STATE));
-        assert(deposit_price >= auction.start_price, Errors::invalid_argument(ERR_AUCTION_INSUFFICIENT_DEPOSIT));
+        assert(state == INIT, ERR_AUCTION_INVALID_STATE);
+        assert(deposit_price >= auction.start_price, ERR_AUCTION_INSUFFICIENT_DEPOSIT);
 
         // Deposit object
         Token::deposit(&mut auction.seller_objective, objective);
@@ -263,31 +261,31 @@ module Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
-        assert(state == BIDDING, Errors::invalid_state(ERR_AUCTION_INVALID_STATE));
+        assert(state == BIDDING, ERR_AUCTION_INVALID_STATE);
 
         let account_address = Signer::address_of(account);
         let last_buyer = Option::get_with_default(&auction.buyer, default_addr());
         let seller = Option::get_with_default(&auction.seller, default_addr());
-        assert(bid_price >= auction.start_price, Errors::invalid_state(ERR_AUCTION_BLOW_START_PRICE));
-        assert(account_address != seller, Errors::invalid_state(ERR_AUCTION_BID_CANNOT_BE_SELLER));
+        assert(bid_price >= auction.start_price, ERR_AUCTION_BLOW_START_PRICE);
+        assert(account_address != seller, ERR_AUCTION_BID_CANNOT_BE_SELLER);
 
         // The same user cannot bid twice in a row
-        assert(account_address != last_buyer, Errors::invalid_argument(ERR_AUCTION_BID_REPEATE));
+        assert(account_address != last_buyer, ERR_AUCTION_BID_REPEATE);
 
         // Retreat bid deposit token to latest buyer who has bidden.
         let bid_reverse_amount = Token::value<BidTokenType>(&auction.buyer_bid_reserve);
         if (last_buyer != default_addr() && bid_reverse_amount > 0) {
-            AucTokenUtil::extract_from_reverse(last_buyer, &mut auction.buyer_bid_reserve);
+            AuctionUtil::extract_from_reverse(last_buyer, &mut auction.buyer_bid_reserve);
         };
 
         // Assert bid reverse is clean
-        assert(AucTokenUtil::zero(&auction.buyer_bid_reserve), ERR_AUCTION_BID_RESERVE_NOT_CLEAN);
+        assert(AuctionUtil::zero(&auction.buyer_bid_reserve), ERR_AUCTION_BID_RESERVE_NOT_CLEAN);
 
         // Put bid user to current buyer, Get AUC token from user and deposit it to auction.
-        AucTokenUtil::deposit_to_reverse(account, &mut auction.buyer_bid_reserve, bid_price);
+        AuctionUtil::deposit_to_reverse(account, &mut auction.buyer_bid_reserve, bid_price);
 
         // Auto accept ObjectTokenType
-        AucTokenUtil::maybe_accept_token<ObjectiveTokenT>(account);
+        AuctionUtil::maybe_accept_token<ObjectiveTokenT>(account);
 
         // Replace old buyer to new buyer
         let new_buyer = Signer::address_of(account);
@@ -323,8 +321,7 @@ module Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
-        assert(state == NO_BID || state == CONFIRM || state == UNDER_REVERSE,
-            Errors::invalid_argument(ERR_AUCTION_INVALID_STATE));
+        assert(state == NO_BID || state == CONFIRM || state == UNDER_REVERSE, ERR_AUCTION_INVALID_STATE);
 
         let seller = Option::get_with_default(&auction.seller, default_addr());
         let buyer = Option::get_with_default(&auction.buyer, default_addr());
@@ -332,11 +329,11 @@ module Auction {
         // Bid succeed.
         if (state == CONFIRM) {
             // Put bid amount to seller
-            AucTokenUtil::extract_from_reverse(seller, &mut auction.buyer_bid_reserve);
-            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
+            AuctionUtil::extract_from_reverse(seller, &mut auction.buyer_bid_reserve);
+            AuctionUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
 
             // Put sell objective to buyer
-            AucTokenUtil::extract_from_reverse(buyer, &mut auction.seller_objective);
+            AuctionUtil::extract_from_reverse(buyer, &mut auction.seller_objective);
 
             // Publish AuctionCompleted event
             Event::emit_event(
@@ -348,14 +345,14 @@ module Auction {
 
         } else if (state == NO_BID || state == UNDER_REVERSE) {
             // Retreat last buyer bid deposit token if there has bid
-            if (buyer != default_addr() && AucTokenUtil::non_zero(&auction.buyer_bid_reserve)) {
-                AucTokenUtil::extract_from_reverse(buyer, &mut auction.buyer_bid_reserve);
+            if (buyer != default_addr() && AuctionUtil::non_zero(&auction.buyer_bid_reserve)) {
+                AuctionUtil::extract_from_reverse(buyer, &mut auction.buyer_bid_reserve);
             };
 
             // Retreat seller's assets
             let seller = Option::get_with_default(&auction.seller, default_addr());
-            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
-            AucTokenUtil::extract_from_reverse(seller, &mut auction.seller_objective);
+            AuctionUtil::extract_from_reverse(seller, &mut auction.seller_deposit);
+            AuctionUtil::extract_from_reverse(seller, &mut auction.seller_objective);
 
             // Publish AuctionPassed event
             Event::emit_event(
@@ -396,23 +393,23 @@ module Auction {
         let auction = borrow_global_mut<Auction<ObjectiveTokenT, BidTokenType>>(creator);
         let current_time = Timestamp::now_milliseconds();
         let state = do_auction_state(auction, current_time);
-        assert(state == BIDDING, Errors::invalid_state(ERR_AUCTION_INVALID_STATE));
+        assert(state == BIDDING, ERR_AUCTION_INVALID_STATE);
 
         // Retreat bid deposit token to latest buyer who has bidden.
         let last_buyer = Option::get_with_default(&auction.buyer, default_addr());
         let bid_reverse_amount = Token::value<BidTokenType>(&auction.buyer_bid_reserve);
         if (last_buyer != default_addr() && bid_reverse_amount > 0) {
-            AucTokenUtil::extract_from_reverse(last_buyer, &mut auction.buyer_bid_reserve);
+            AuctionUtil::extract_from_reverse(last_buyer, &mut auction.buyer_bid_reserve);
         };
 
         // Assert bid reverse is clean
-        assert(AucTokenUtil::zero(&auction.buyer_bid_reserve), ERR_AUCTION_BID_RESERVE_NOT_CLEAN);
+        assert(AuctionUtil::zero(&auction.buyer_bid_reserve), ERR_AUCTION_BID_RESERVE_NOT_CLEAN);
 
         // Put bid user to current buyer, Get AUC token from user and deposit it to auction.
-        AucTokenUtil::deposit_to_reverse(account, &mut auction.buyer_bid_reserve, auction.hammer_price);
+        AuctionUtil::deposit_to_reverse(account, &mut auction.buyer_bid_reserve, auction.hammer_price);
 
         // Auto accept ObjectTokenType
-        AucTokenUtil::maybe_accept_token<ObjectiveTokenT>(account);
+        AuctionUtil::maybe_accept_token<ObjectiveTokenT>(account);
 
         auction.hammer_locked = true;
     }
@@ -422,7 +419,7 @@ module Auction {
     }
 
     fun default_addr(): address {
-        platform_addr()
+        @0x0
     }
 }
 }
