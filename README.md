@@ -118,7 +118,7 @@
 |ObjectiveTokenT|Template|标的物代币类型|
 |BidTokenType|Template|竞拍代币类型|
 
-### 清理拍卖
+### 清理拍卖 （暂不开放调用）
 {{address}}::AuctionScript::destroy
 拍卖结束后调用，否则无法创建新的拍卖，该函数由拍卖创建者调用
 
@@ -129,7 +129,7 @@
 |ObjectiveTokenT|Template|标的物代币类型|
 |BidTokenType|Template|竞拍代币类型|
 
---- 
+---
 
 ## API（Off-chain）
 ### 全局查询拍卖列表

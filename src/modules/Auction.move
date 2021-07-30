@@ -365,6 +365,8 @@ module Auction {
                 },
             );
         };
+
+        destroy<ObjectiveTokenT, BidTokenType>(creator);
     }
 
     /// Query auction information from creator address

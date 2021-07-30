@@ -163,8 +163,6 @@ script {
         // Get auction objective from buyer
         let balance2 = Account::balance<AUC>(Signer::address_of(&_account));
         assert(balance2 > 0, 30011);
-
-        Auction::destroy<AUC, STC>(@alice);
     }
 }
 
