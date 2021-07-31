@@ -44,5 +44,10 @@ module AuctionScript {
     (u64, u64, u128, u128, u128, u8, address, address, u128) {
         Auction::auction_info<ObjectiveTokenT, BidTokenType>(creator)
     }
+
+    public ( script ) fun hammer_buy<ObjectiveTokenT: copy + drop + store,
+                                     BidTokenType: copy + drop + store>(_account: signer, creator: address) {
+        Auction::hammer_buy<ObjectiveTokenT, BidTokenType>(&_account, creator);
+    }
 }
 }
