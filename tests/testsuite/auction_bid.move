@@ -44,7 +44,7 @@ script {
     use 0x1::Math;
     use 0x1::Signer;
     use 0x1::Timestamp;
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(account: signer) {
         let precision: u8 = 9; //STC precision is also 9.
@@ -81,7 +81,7 @@ script {
     use 0x1::Math;
     use 0x1::Signer;
     //use 0x1::Debug;
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(account: signer) {
         let precision: u8 = 9; // STC precision is also 9.
@@ -113,7 +113,7 @@ script {
     use 0x1::Math;
     use 0x1::Signer;
     //use 0x1::Debug;
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(account: signer) {
         let precision: u8 = 9; // STC precision is also 9.
@@ -148,7 +148,7 @@ script {
     use alice::TokenMock::{AUC};
     use 0x1::Signer;
     use 0x1::Account;
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(_account: signer) {
         let (_start_time, _end_time, _, _, _, _state, _seller, _buyer, _bid_reserve_amount) =
@@ -174,7 +174,7 @@ script {
 //    // Clean the auction created by `alice`
 //    use 0x1::STC::{STC};
 //    use alice::TokenMock::{AUC};
-//    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+//    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 //
 //    fun init(_account: signer) {
 //        Auction::<AUC, STC>(Signer::address_of(_account));

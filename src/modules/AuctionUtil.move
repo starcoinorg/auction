@@ -1,4 +1,4 @@
-address 0x55292155D6C6CAcCC730f6E7Ac4d4cae {
+address 0xBdfBbC6A3e7a0c994b720158B171305b {
 module AuctionUtil {
     use 0x1::Token;
     use 0x1::Account;

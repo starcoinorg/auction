@@ -44,7 +44,7 @@ script {
     use 0x1::Math;
     use 0x1::Signer;
     use 0x1::Timestamp;
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(account: signer) {
         let precision: u8 = 9; //STC precision is also 9.
@@ -77,7 +77,7 @@ script {
     // Using `bob` hammer buy
     use alice::TokenMock::{AUC};
     use 0x1::STC::{STC};
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
 
     fun init(account: signer) {
         Auction::hammer_buy<AUC, STC>(&account, @alice);

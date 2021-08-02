@@ -1,4 +1,4 @@
-address 0x55292155D6C6CAcCC730f6E7Ac4d4cae {
+address 0xBdfBbC6A3e7a0c994b720158B171305b {
 /// The <Auction> module defined some struct of auction
 module Auction {
     use 0x1::Signer;
@@ -9,7 +9,7 @@ module Auction {
     use 0x1::Event;
     //use 0x1::Debug;
 
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::AuctionUtil;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::AuctionUtil;
 
     ///
     /// Auction state
@@ -415,7 +415,7 @@ module Auction {
     }
 
     fun platform_addr(): address {
-        @0x55292155D6C6CAcCC730f6E7Ac4d4cae
+        @0xBdfBbC6A3e7a0c994b720158B171305b
     }
 
     fun default_addr(): address {

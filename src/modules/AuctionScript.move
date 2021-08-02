@@ -1,6 +1,6 @@
-address 0x55292155D6C6CAcCC730f6E7Ac4d4cae {
+address 0xBdfBbC6A3e7a0c994b720158B171305b {
 module AuctionScript {
-    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::Auction;
+    use 0xBdfBbC6A3e7a0c994b720158B171305b::Auction;
     use 0x1::Account;
 
     public ( script ) fun create<ObjectiveTokenT: copy + drop + store,
