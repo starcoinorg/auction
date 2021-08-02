@@ -1,4 +1,4 @@
-address 0xbd7e8be8fae9f60f2f5136433e36a091 {
+address 0x55292155D6C6CAcCC730f6E7Ac4d4cae {
 
 /// AUC is a test token of Starcoin blockchain
 /// It uses apis defined in the `Token` module.
@@ -15,7 +15,7 @@ module Auc {
 //    use 0x1::PackageTxnManager;
 //    use 0x1::OnChainConfigDao;
 
-//    use 0xbd7e8be8fae9f60f2f5136433e36a091::TokenSwapConfig;
+//    use 0x55292155D6C6CAcCC730f6E7Ac4d4cae::TokenSwapConfig;
     //    use 0x1::VMConfig;
 //    use 0x1::ConsensusConfig;
 //    use 0x1::RewardConfig;
